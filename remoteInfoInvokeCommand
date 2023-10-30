@@ -1,0 +1,51 @@
+# List of remote hostnames or IP addresses
+$remoteHosts = @("Host1", "Host2", "Host3")
+
+# Initialize an empty array to store computer information for online hosts
+$onlineComputerInfoArray = @()
+
+# Initialize an empty array to store offline or error hosts
+$offlineOrErrorHosts = @()
+
+# Loop through each remote host
+foreach ($hostname in $remoteHosts) {
+    try {
+        $result = Invoke-Command -ComputerName $hostname -ScriptBlock {
+            $ipAddress = (Test-Connection -ComputerName $env:COMPUTERNAME -Count 1).IPV4Address.IPAddressToString
+
+            # ... (rest of your code for gathering information)
+
+            return [PSCustomObject]@{
+                "Hostname"     = $env:COMPUTERNAME
+                "IP Address"   = $ipAddress
+                "MAC Address"  = $macAddress
+                "Serial Number"= $serialNumber
+                "OS Version"   = $osVersion
+                "Device Type"  = $deviceType
+            }
+        }
+
+        # Add the result to the appropriate array
+        $onlineComputerInfoArray += $result
+    } catch {
+        Write-Host "Failed to gather information for host $hostname: $_"
+        # Add the hostname to the list of offline or error hosts
+        $offlineOrErrorHosts += $hostname
+    }
+}
+
+# Specify the CSV file paths
+$onlineCsvFilePath = "C:\temp\online_computers.csv"
+$offlineCsvFilePath = "C:\temp\offline_or_error_hosts.csv"
+
+# Export online computer information to the online CSV
+if ($onlineComputerInfoArray.Count -gt 0) {
+    $onlineComputerInfoArray | Export-Csv -Path $onlineCsvFilePath -NoTypeInformation -Force
+    Write-Host "Online computer information has been saved to $onlineCsvFilePath"
+}
+
+# Export offline or error host list to the offline CSV
+if ($offlineOrErrorHosts.Count -gt 0) {
+    $offlineOrErrorHosts | Export-Csv -Path $offlineCsvFilePath -NoTypeInformation -Force
+    Write-Host "Offline or error hosts have been saved to $offlineCsvFilePath"
+}
