@@ -13,7 +13,27 @@ foreach ($hostname in $remoteHosts) {
         $result = Invoke-Command -ComputerName $hostname -ScriptBlock {
             $ipAddress = (Test-Connection -ComputerName $env:COMPUTERNAME -Count 1).IPV4Address.IPAddressToString
 
-            # ... (rest of your code for gathering information)
+            # Get the network adapter name corresponding to the IP address
+            $networkAdapterName = (Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }).Name
+
+            # Initialize MAC address variable
+            $macAddress = $null
+
+            # Loop through each IP address to find the corresponding MAC address
+            foreach ($ip in $ipAddress) {
+                $interfaceIndex = (Get-NetIPAddress -IPAddress $ip).InterfaceIndex
+                $mac = (Get-NetAdapter -InterfaceIndex $interfaceIndex).MacAddress
+                if ($null -ne $mac) {
+                    $macAddress = $mac
+                    break
+                }
+            }
+
+            $serialNumber = (Get-CimInstance -ClassName Win32_Bios).SerialNumber
+            $osVersion = (Get-CimInstance -ClassName Win32_OperatingSystem).Version
+
+            # Get the device type using WMI
+            $deviceType = (Get-WmiObject -Class Win32_ComputerSystem).Model
 
             return [PSCustomObject]@{
                 "Hostname"     = $env:COMPUTERNAME
