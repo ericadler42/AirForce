@@ -1,64 +1,68 @@
-# Define a function to retrieve computer information
-function Get-RemoteComputerInfo {
-    param (
-        [string]$ComputerName
-    )
+# List of remote hostnames or IP addresses
+$remoteHosts = @("Host1", "Host2", "Host3")
 
-    # Get computer information
-    $hostname = $ComputerName
-    $ipAddress = (Test-Connection -ComputerName $hostname -Count 1).IPV4Address.IPAddressToString
+# Initialize an empty array to store computer information for each host
+$computerInfoArray = @()
 
-    # Get the network adapter name corresponding to the IP address
-    $networkAdapterName = (Invoke-Command -ComputerName $hostname -ScriptBlock { Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } }).Name
+# Loop through each remote host
+foreach ($hostname in $remoteHosts) {
+    # Use Try-Catch to handle WinRM errors and continue to the next host on error
+    try {
+        $ipAddress = (Test-Connection -ComputerName $hostname -Count 1).IPV4Address.IPAddressToString
 
-    # Initialize MAC address variable
-    $macAddress = $null
+        # Get the network adapter name corresponding to the IP address
+        $networkAdapterName = (Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }).Name
 
-    # Loop through each IP address to find the corresponding MAC address
-    foreach ($ip in $ipAddress) {
-        $interfaceIndex = (Invoke-Command -ComputerName $hostname -ScriptBlock { Get-NetIPAddress -IPAddress $ip }).InterfaceIndex
-        $mac = (Invoke-Command -ComputerName $hostname -ScriptBlock { Get-NetAdapter -InterfaceIndex $interfaceIndex }).MacAddress
-        if ($null -ne $mac) {
-            $macAddress = $mac
-            break
+        # Initialize MAC address variable
+        $macAddress = $null
+
+        # Loop through each IP address to find the corresponding MAC address
+        foreach ($ip in $ipAddress) {
+            $interfaceIndex = (Get-NetIPAddress -IPAddress $ip).InterfaceIndex
+            $mac = (Get-NetAdapter -InterfaceIndex $interfaceIndex).MacAddress
+            if ($null -ne $mac) {
+                $macAddress = $mac
+                break
+            }
         }
-    }
 
-    $serialNumber = (Invoke-Command -ComputerName $hostname -ScriptBlock { (Get-CimInstance -ClassName Win32_Bios).SerialNumber })
-    $osVersion = (Invoke-Command -ComputerName $hostname -ScriptBlock { (Get-CimInstance -ClassName Win32_OperatingSystem).Version })
+        $serialNumber = (Get-CimInstance -ClassName Win32_Bios).SerialNumber
+        $osVersion = (Get-CimInstance -ClassName Win32_OperatingSystem).Version
 
-    # Get the device type using WMI
-    $deviceType = (Invoke-Command -ComputerName $hostname -ScriptBlock { (Get-WmiObject -Class Win32_ComputerSystem).Model })
+        # Get the device type using WMI
+        $deviceType = (Get-WmiObject -Class Win32_ComputerSystem).Model
 
-    # Create a custom object with the gathered information
-    [PSCustomObject]@{
-        "Hostname"     = $hostname
-        "IP Address"   = $ipAddress
-        "MAC Address"  = $macAddress
-        "Serial Number"= $serialNumber
-        "OS Version"   = $osVersion
-        "Device Type"  = $deviceType
+        # Create a custom object with the gathered information for this host
+        $computerInfo = [PSCustomObject]@{
+            "Hostname"     = $hostname
+            "IP Address"   = $ipAddress
+            "MAC Address"  = $macAddress
+            "Serial Number"= $serialNumber
+            "OS Version"   = $osVersion
+            "Device Type"  = $deviceType
+        }
+
+        # Add the computer information object to the array
+        $computerInfoArray += $computerInfo
+    } catch {
+        Write-Host "Failed to gather information for host $hostname: $_"
+        # Add the hostname or IP to the list of offline or error hosts
+        $offlineOrErrorHosts += $hostname
     }
 }
 
-# List of computer names
-$computerNames = "Computer1", "Computer2", "Computer3"
-
 # Specify the CSV file path
 $csvFilePath = "C:\temp\output.csv"
+$offlineCsvFilePath = "C:\temp\offline_or_error_hosts.csv"
 
-# Loop through the list of computer names and retrieve information
-foreach ($computerName in $computerNames) {
-    $computerInfo = Get-RemoteComputerInfo -ComputerName $computerName
+# Export online computer information to the online CSV
+if ($onlineComputerInfoArray.Count -gt 0) {
+    $onlineComputerInfoArray | Export-Csv -Path $onlineCsvFilePath -NoTypeInformation -Force
+    Write-Host "Online computer information has been saved to $onlineCsvFilePath"
+}
 
-    # Check if the CSV file exists, and if not, create a new one with headers
-    if (-not (Test-Path -Path $csvFilePath)) {
-        $computerInfo | Export-Csv -Path $csvFilePath -NoTypeInformation -Force
-    }
-    else {
-        # Append the computer information to the existing CSV file
-        $computerInfo | Export-Csv -Path $csvFilePath -NoTypeInformation -Append
-    }
-
-    Write-Host "Computer information for $computerName has been saved to $csvFilePath"
+# Export offline or error host list to the offline CSV
+if ($offlineOrErrorHosts.Count -gt 0) {
+    $offlineOrErrorHosts | Export-Csv -Path $offlineCsvFilePath -NoTypeInformation -Force
+    Write-Host "Offline or error hosts have been saved to $offlineCsvFilePath"
 }
