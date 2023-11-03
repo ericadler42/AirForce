@@ -146,4 +146,19 @@ if ($offlineOrErrorHosts.Count -gt 0) {
     Write-Host "Offline or error hosts have been saved to $offlineCsvFilePath"
 }
 
+---------------------------------------
+
+catch {
+    $errorMessage = $_.Exception.Message  # Capture the error message
+    Write-Host "Failed to gather information for host $hostname: $errorMessage"
+    
+    # Create a custom object with the hostname and error message
+    $offlineHost = [PSCustomObject]@{
+        "Hostname" = $hostname
+        "Error"    = $errorMessage
+    }
+
+    # Add the offline host object to the list of offline or error hosts
+    $offlineOrErrorHosts += $offlineHost
+}
 
